@@ -24,7 +24,7 @@ knitr::knit_hooks$set(plot = my_plot_hook)
 library(tidyverse)
 #source("/home/isac/Code/ilee/plot/ilee_plot_utils.R")
 library("tidyverse")
-source("../nanopore-methylation-utilities/methylation_R_utils.R")
+source("/home/gmoney/Code/nanopore-methylation-utilities/methylation_R_utils.R")
 
 order_reads <- function(x,bounds=NULL){
   # get boundaries of reads if not provided
