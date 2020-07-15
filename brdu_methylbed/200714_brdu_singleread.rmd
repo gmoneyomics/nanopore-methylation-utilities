@@ -1,0 +1,147 @@
+---
+title: "Plotting BrdU single reads"
+author: "G$"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  pdf_document: default
+  html_notebook: default
+mainfont: DejaVu Sans
+titlefont: DejaVu Sans
+---
+
+```{r setup, eval=TRUE, include=FALSE, cache=F, message=F, warning=F, results="hide"}
+rm(list=ls());gc()
+#knitr::opts_chunk$set(fig.path='figs/')
+knitr::opts_chunk$set(cache = FALSE, warning = FALSE,
+                      message = FALSE, cache.lazy = FALSE)
+my_plot_hook <- function(x, options)
+  paste("\n", knitr::hook_plot_tex(x, options), "\n")
+knitr::knit_hooks$set(plot = my_plot_hook)
+```
+
+
+```{r functions, include=F}
+library(tidyverse)
+#source("/home/isac/Code/ilee/plot/ilee_plot_utils.R")
+library("tidyverse")
+source("../nanopore-methylation-utilities/methylation_R_utils.R")
+
+order_reads <- function(x,bounds=NULL){
+  # get boundaries of reads if not provided
+  if (is.null(bounds)){
+    bounds <- x%>% group_by(qname) %>%
+      summarize(start = min(start),
+                end = max(end))
+    # label y based on order of smallest start
+    bounds<- bounds %>% arrange(start, end) %>%
+      mutate(
+        readi = seq_len(length(unique(x$qname))),
+        ymin = -readi - 0.8, 
+        ymax = ymin + 0.6)
+  }
+  x <- x %>%
+    mutate(ymin = bounds$ymin[match(qname,bounds$qname)],
+           ymax = bounds$ymax[match(qname,bounds$qname)])
+  bounds <- bounds %>%
+    mutate(ymin = bounds$ymin[match(qname,bounds$qname)],
+           ymax = bounds$ymax[match(qname,bounds$qname)])
+  return(list(x = x,bounds = bounds))
+}
+
+smoothCalls <- function(calls,reg=NULL,bandwidth = 80){
+  calls <- calls %>%
+    mutate(mcall = ifelse(abs(score)>1,sign(score),score)) # ceiling based on log-lik ratio - this uses log-lik ratio when call is not obvious
+  if (is.null(reg)) {
+    xpoints <- seq(min(calls$start),max(calls$start))
+  } else {
+    reg <- as_tibble(reg)
+    xpoints <- seq(reg$start,reg$end)
+  }
+  ks <- ksmooth(calls$start,calls$mcall,bandwidth = 80,kernel = "normal",x.points = xpoints)
+  tibble(
+    start = ks$x,
+    mcall_smooth = ks$y, 
+    mcall = case_when(
+      mcall_smooth > 0 ~ 1,
+      mcall_smooth < 0 ~ 0,
+      TRUE ~ -1)) 
+}
+```
+
+
+# BrdU pulse single read plots 
+First read in 100000 lines of the output441.detect file 
+```{r data, include = F}
+
+pulse <- read_delim("/dilithium/Data/gmoney/analysis/telomere/output441.detect.big", delim= " ", col_names =  F, n_max = 100000) %>%
+  rename(X1 = "qname", X2 = "chrom", X3 = "start", X4 = "end", X5 = "strand") %>%
+  separate(X6, c("pos", "score", "context", "called"), "\t") %>%
+  mutate(score = as.numeric(score)) %>%
+  mutate(start = as.numeric(start) + as.numeric(pos)) %>%
+  mutate(end = start) %>%
+  mutate(mcall = if_else((score >= 2), 1, ifelse((score <= -2), 0, NA_real_))) %>%
+  dplyr::select(c(chrom, start, end, qname,mcall, score,context))
+  
+
+```
+
+# Thresholding
+Keep calls that have log likelihood scores greater than 2 (BrdU) or less than -2 (no BrdU). We can be confident that these calls are correct based on their log likelihood values
+
+```{r thresh, echo = F}
+
+m <- length(which(pulse$score>2.5))
+u <- length(which(pulse$score<(-2.5)))
+a <- length(pulse$score)
+calls <- round((((m+u)/a)*100), digits = 2)
+meth <- round(((m/(m+u))*100), digits=2)
+
+print(ggplot(pulse, aes(x= score, fill = score))+geom_histogram(binwidth = 2, alpha = .5, fill = "red")+xlim(-25,25)+geom_vline(xintercept = c(-2,2), linetype = "dotted"))
+
+```
+
+BrdU calling stats:
+  
+Percent high quality calls: `r calls`%  
+Percent BrdU: `r meth`%  
+
+# Single read plots
+Define a region to plot, I picked the first 5kb of chrI because I don't know where to look
+```{r smooth, include=F}
+#pick region
+region_chrom="chrI"
+region_start=5
+region_end=5000
+
+region <- pulse %>%
+  filter(chrom == region_chrom) %>%
+  filter(start >= region_start) %>%
+  filter(end <= region_end)
+
+brdu_runs <-getRuns(region, maxGap = 20)
+brdu_runs.ordered <- order_reads(brdu_runs)
+
+  brdu_runs <- brdu_runs.ordered$x %>%
+    mutate(m = ifelse(values == 1, "Modified","Unmodified")) %>%
+    mutate(mod = "BrdU")
+
+```
+
+```{r plot, echo=F}
+
+pal <- pal_npg("nrc")(10)
+meth_pal <- c(pal[4],pal[5], pal[1], pal[2])
+
+
+
+  g <- ggplot(brdu_runs,aes(xmin = start, xmax = end, ymin = ymin, ymax = ymax)) +
+    facet_wrap(~mod,ncol = 1) +
+  #  geom_rect(data = rawruns.ordered$bounds, fill = "grey80") + 
+    geom_rect(aes(fill = m))  +
+#    geom_vline(xintercept = 127638255, linetype == "dashed") +
+    scale_fill_manual(name = "State", values = meth_pal) + theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(),
+          panel.spacing = unit(2, "lines")) + labs(title = paste0(region_chrom,":",region_start, "-", region_end))#+coord_cartesian(xlim=c(0, 10000))
+  
+  print(g)
+
+```
