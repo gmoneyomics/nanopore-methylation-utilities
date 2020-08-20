@@ -1,0 +1,7 @@
+nanopolish: /home/isac/Software/nanopolish
+minimap2: /usr/local/bin/minimap2 
+nanopore-methylation-utilities: /home/gmoney/repos/nanopore-methylation-utilities
+reference: /atium/Data/Reference/human/hg38/GRCh38.primary_assembly.genome.fa
+out: /kyber/Data/Nanopore/projects/c9orf72/190710_c9orf72_ctx/snake_test
+fastqdir: /kyber/Data/Nanopore/projects/c9orf72/190710_c9orf72_ctx/basecalls/fastq/
+fast5: /kyber/Data/Nanopore/projects/c9orf72/190710_c9orf72_ctx/fast5
