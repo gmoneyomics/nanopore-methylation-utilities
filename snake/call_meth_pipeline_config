@@ -31,7 +31,7 @@ rule all:
 
 rule align:
     input:
-        fastq = fastqpath + "{sample1}.fastq",
+        fastq = fastqpath + "/{sample1}.fastq",
         ann = ref
     output:
         base_out_path + "/bam/{sample1}.bam"
@@ -50,7 +50,7 @@ rule align:
 rule nanpolish:
     input:
     #	expand( base_out_path + "/bam/{sample1}.bam", sample1=SAMPLESLONG),
-        fastq = fastqpath + "{sample1}.fastq",
+        fastq = fastqpath + "/{sample1}.fastq",
         fast5 = fast5path,
         bam = base_out_path + "/bam/{sample1}.bam"
     output:
