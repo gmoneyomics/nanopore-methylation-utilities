@@ -43,7 +43,7 @@ rule align:
 
     message: """Aligning to human reference with minimap2"""
     shell:"""
-        {minimap} -ax map-ont -t 12 {input.ann} {input.fastq} | samtools view -S -b | samtools sort -o {output}
+        {minimap} -ax map-ont -t 4 {input.ann} {input.fastq} | samtools view -S -b | samtools sort -o {output}
 	samtools index {params.DIR}/{params.file}
     """
 
@@ -61,7 +61,7 @@ rule nanpolish:
     message: """calling methylation with nanopolish"""
     shell:"""
     	/home/isac/Software/nanopolish/nanopolish index -d {input.fast5} {input.fastq}
-	{nanopolish}/nanopolish call-methylation -b {input.bam} -r {input.fastq} -g {rules.align.input.ann} -q cpg -t 12 --progress > {params.DIR}/{params.file}
+	{nanopolish}/nanopolish call-methylation -b {input.bam} -r {input.fastq} -g {rules.align.input.ann} -q cpg -t 4 --progress > {params.DIR}/{params.file}
     """
     #/home/isac/Software/nanopolish/nanopolish index -d {input.fast5} {input.fastq}
 rule methylbed:
