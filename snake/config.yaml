@@ -1,7 +1,8 @@
 nanopolish: /home/isac/Software/nanopolish
 minimap2: /usr/local/bin/minimap2 
 nanopore-methylation-utilities: /home/gmoney/repos/nanopore-methylation-utilities
-reference: /kyber/Data/Nanopore/Analysis/gmoney/snake_test/dat/methylation_example/reference.fasta
-out: /kyber/Data/Nanopore/Analysis/gmoney/snake_test
-fastqdir: /kyber/Data/Nanopore/Analysis/gmoney/snake_test/dat/methylation_example
-fast5: /kyber/Data/Nanopore/Analysis/gmoney/snake_test/dat/methylation_example/fast5_files
+reference: /home/gmoney/projects/nanopore-methylation-utilities/snake/test/methylation_example/reference.fasta
+out: /home/gmoney/projects/nanopore-methylation-utilities/snake/test/methylation_example 
+fastqdir: /home/gmoney/projects/nanopore-methylation-utilities/snake/test/methylation_example
+fast5: /home/gmoney/projects/nanopore-methylation-utilities/snake/test/methylation_example/fast5_files
+cores: 65
