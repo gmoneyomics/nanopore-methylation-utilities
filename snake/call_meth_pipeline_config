@@ -58,7 +58,7 @@ rule nanpolish:
         file = "{sample1}_CpG_methylation.tsv"
     message: """calling methylation with nanopolish"""
     shell:"""
-    	/home/isac/Software/nanopolish/nanopolish index -d {input.fast5} {input.fastq}
+    	{nanopolish}/nanopolish index -d {input.fast5} {input.fastq}
 	{nanopolish}/nanopolish call-methylation -b {input.bam} -r {input.fastq} -g {rules.align.input.ann} -q cpg -t {params.cores} --progress > {params.DIR}/{params.file}
     """
     #/home/isac/Software/nanopolish/nanopolish index -d {input.fast5} {input.fastq}
