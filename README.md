@@ -2,9 +2,13 @@
 
 # Dependencies
 Install Minimap2 https://github.com/lh3/minimap2
+
 Install Nanopolish https://github.com/jts/nanopolish
+
 Install bcftools, samtools, htslib http://www.htslib.org/download/
+
 Install nanopore-methylation-utilites https://github.com/timplab/nanopore-methylation-utilities
+
 Install snakemake https://snakemake.readthedocs.io/en/stable/
 
 # Setting up pipeline
