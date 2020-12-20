@@ -1,0 +1,247 @@
+---
+title: "Plotting Megalodon single reads"
+author: "G$"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  pdf_document: default
+  html_notebook: default
+mainfont: DejaVu Sans
+titlefont: DejaVu Sans
+---
+
+```{r setup, eval=TRUE, include=FALSE, cache=F, message=F, warning=F, results="hide"}
+rm(list=ls());gc()
+knitr::opts_chunk$set(cache = FALSE, warning = FALSE,
+                      message = FALSE, cache.lazy = FALSE)
+my_plot_hook <- function(x, options)
+  paste("\n", knitr::hook_plot_tex(x, options), "\n")
+knitr::knit_hooks$set(plot = my_plot_hook)
+```
+
+
+```{r functions, include=F}
+
+# load functions and libraries 
+library(gridExtra)
+library(tidyverse)
+library(wesanderson)
+library(ggsci)
+library(scales)
+### PLOT UTILS ####
+
+# set theme
+theme_set(theme_bw()+
+          theme(panel.grid.major = element_blank(),
+                panel.grid.minor = element_blank(),
+                strip.background = element_blank(),
+                panel.border = element_rect(size=0.5,colour="black"),
+                axis.text = element_text(color="black")
+                )
+          )
+pal <- wes_palette("FantasticFox1")
+heat_pal <- c(pal[3],pal[2],pal[4],pal[5])
+pal <- wes_palette("Rushmore1")
+
+pal_cont_polar <- wes_palette("Zissou1", 21, type = "continuous")
+
+# functions
+plotter <- function(print_obj,pre = "temp",out_dir = "~/Dropbox/Data/tmp",h = 4, w = 6){
+  # if not interactive, just print it
+  if( ! interactive()) {
+    print(print_obj)
+  } else {
+    # if interactive, I want to export this to a pdf file
+    outpath <- paste0(out_dir,"/",pre,".pdf")
+    message(paste("outputting plot to", outpath))
+    pdf(outpath,height = h, width = w, useDingbats = F)
+    print(print_obj)
+    dev.off()
+  }
+}
+
+####### functions ###########
+getRuns <- function(calls, maxGap = NULL, pad = 0){
+  if (!is.null(maxGap)){
+    pad = maxGap/4
+    indices <- c(0,cumsum(diff(calls$start)> maxGap)) # based on difference to previous call
+    calls$indices <- indices
+    calls <- calls %>%
+      filter(mcall != -1) %>%
+      group_by(qname,indices)
+  } else { 
+    calls <- calls %>%
+      filter(mcall != -1) %>%
+      group_by(qname)
+  }
+  calls.list <- calls %>%
+    group_split(keep = F)
+  calls.keys <- calls %>%
+    group_keys()
+  runs.list <- lapply(calls.list,function(x){
+    if (length(unique(x$mcall)) == 1){
+      tibble(lengths = nrow(x),
+        values = x$mcall[1],
+        endi = lengths,
+        starti = 1,
+        start = min(x$start) - pad,
+        end = max(x$start) + 1 + pad,
+        width = end - start)
+    } else {
+      rle(x$mcall) %>%
+      unclass() %>% as_tibble() %>%
+      mutate( endi = cumsum(lengths),
+              starti = c(1,dplyr::lag(endi)[-1]+1),
+              start = x$start[starti] - pad,
+              end = x$start[endi] + 1 + pad,
+              width = end - start ) %>%
+        filter( width >= 0) # remove negative widths (in case of dups, etc.)
+    }
+  })
+  runs <- bind_rows(runs.list,.id = "run_index") 
+  runs$qname = calls.keys$qname[as.numeric(runs$run_index)]
+  runs[,-1]
+}
+
+order_reads <- function(x,bounds=NULL){
+  # get boundaries of reads if not provided
+  if (is.null(bounds)){
+    freqs <- x %>% 
+      select(c(qname, freq)) %>%
+      distinct()
+    
+    
+    bounds <- x%>% group_by(qname) %>%
+      summarize(start = min(start),
+                end = max(end)) 
+    bounds <- merge(bounds, freqs, by = "qname")
+    # label y based on order of smallest start
+    bounds<- bounds %>% 
+      arrange(freq, start, end) %>%
+      mutate(
+        readi = row_number(),
+        ymin = -readi - 0.8, 
+        ymax = ymin + 0.6)
+  }
+  x <- x %>%
+    mutate(ymin = bounds$ymin[match(qname,bounds$qname)],
+           ymax = bounds$ymax[match(qname,bounds$qname)])
+  bounds <- bounds %>%
+    mutate(ymin = bounds$ymin[match(qname,bounds$qname)],
+           ymax = bounds$ymax[match(qname,bounds$qname)])
+  return(list(x = x,bounds = bounds))
+}
+
+smoothCalls <- function(calls,reg=NULL,bandwidth = 80){
+  calls <- calls %>%
+    mutate(mcall = ifelse(abs(score)>1,sign(score),score)) # ceiling based on log-lik ratio - this uses log-lik ratio when call is not obvious
+  if (is.null(reg)) {
+    xpoints <- seq(min(calls$start),max(calls$start))
+  } else {
+    reg <- as_tibble(reg)
+    xpoints <- seq(reg$start,reg$end)
+  }
+  ks <- ksmooth(calls$start,calls$mcall,bandwidth = 80,kernel = "normal",x.points = xpoints)
+  tibble(
+    start = ks$x,
+    mcall_smooth = ks$y, 
+    mcall = case_when(
+      mcall_smooth > 0 ~ 1,
+      mcall_smooth < 0 ~ 0,
+      TRUE ~ -1)) 
+}
+```
+
+
+# CpG single read plots 
+
+```{r data, include = F}
+
+# mod_log_prob = natural log of probability modified 
+# can_log_prob = natural log of probability canonical
+# if that score is > .8 the base is modified according to random people on the internet https://github.com/nanoporetech/megalodon/issues/47
+
+# these are recorded as natural logs so set the threshold as natural log of .8 (REMEMBER IN R log() IS NATURAL LOG AND log10() NORMAL LOG)
+
+# this was easy for me to load the whole file  -- but it might be too much mem for a small computer so can subset it first 
+pulse <- read_delim("/kyber/Data/Nanopore/projects/regot_targ/200818_helen/dat/megaladon/megalodon_results/per_read_modified_base_calls.txt", delim= "\t", col_names =  T) %>%
+  dplyr::rename(c("qname" = read_id, "chrom" = chrm, "start" = pos)) %>%
+  dplyr::mutate(score = as.numeric(mod_log_prob)) %>%
+  dplyr::mutate(start = ifelse(strand == "-1", (start-1), start)) %>%
+  dplyr::mutate(end = start) %>%
+  dplyr::mutate(mcall = case_when(mod_log_prob >= (log(.8)) ~ "1",
+                                  can_log_prob >= (log(.8)) ~ "0", 
+                TRUE ~ "NA")) %>%
+  mutate(mcall = as.numeric(mcall)) # make sure to change mcall to numeric
+
+
+```
+
+# Look at mod call distribution
+
+- mod_log_prob = natural log of probability modified base
+- can_log_prob = natural log of probability canonical base
+- Choose a threshold of .8 for determining if a base is modified or canonical 
+```{r thresh, echo = F}
+
+m <- length(which(pulse$mod_log_prob> log(.8)))
+u <- length(which(pulse$can_log_prob>(log(.8))))
+a <- length(pulse$can_log_prob)
+calls <- round((((m+u)/a)*100), digits = 2)
+meth <- round(((m/(m+u))*100), digits=2)
+
+p1 <- ggplot(pulse, aes(x= mod_log_prob, fill = score))+geom_histogram(binwidth = .1, alpha = .5, fill = "red")+geom_vline(xintercept = c(log(.8)), linetype = "dotted")
+
+p2 <- ggplot(pulse, aes(x= can_log_prob, fill = score))+geom_histogram(binwidth = .1, alpha = .5, fill = "red")+geom_vline(xintercept = c(log(.8)), linetype = "dotted")
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Calling stats:
+
+Percent mod: `r meth`%  
+
+# Single read plots
+```{r smooth, include=F}
+#pick region
+region_chrom="chr4"
+region_start=153684144
+region_end=153684290
+TSS=153684281
+
+region <- pulse %>%
+  filter(chrom == region_chrom) %>%
+  filter(start >= region_start) %>%
+  filter(end <= region_end) %>%
+  group_by(qname) %>%
+  dplyr::mutate(freq = (mean(mcall, na.rm = TRUE)*-1))
+
+# order the reads for plotting, if plotting bigger region can set max gap higher for aesthetics 
+brdu_runs <-getRuns(region, maxGap = 0)
+brdu_runs.ordered <- order_reads(region)
+
+  brdu_runs <- brdu_runs.ordered$x %>%
+    mutate(m = ifelse(mcall == 1, "Methylated","Unmethylated")) %>%
+    mutate(mod = "CpG")
+
+```
+
+```{r plot, echo=F}
+
+# pick colors 
+pal <- pal_npg("nrc")(10)
+meth_pal <- c(pal[1], pal[2])
+
+# plot
+  g <- ggplot(brdu_runs,aes(xmin = start, xmax = end+1, ymin = ymin, ymax = ymax)) +
+    facet_wrap(~mod,ncol = 1) +
+    geom_rect(data = brdu_runs.ordered$bounds, fill = "grey80") + 
+    geom_rect(aes(fill = m))  +
+    geom_vline(xintercept = TSS, linetype = "dotted") +
+    annotate("text", x = TSS, y = 0, label = "TSS") +
+    scale_fill_manual(name = "State", values = meth_pal) + theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(),
+          panel.spacing = unit(2, "lines")) + labs(title = paste0(region_chrom,":",region_start, "-", region_end)) +
+    labs(x = "Genomic Coordinates", y = "")
+  
+  print(g)
+
+```
