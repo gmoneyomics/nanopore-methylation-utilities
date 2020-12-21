@@ -97,7 +97,7 @@ rule methylbam:
         cores = cores
     message: """convert bam for methylation"""
     shell:"""
-        samtools view -h -b -F 272 {input.bam} > {params.DIR}/{params.filt}
+        samtools view -h -b -F 256 {input.bam} > {params.DIR}/{params.filt}
         samtools index {params.DIR}/{params.filt}
         python3 {util}/convert_bam_for_methylation.py -t {params.cores} --verbose -b {params.DIR}/{params.filt} \
                -c {input.tsv} -f {ref} |\
