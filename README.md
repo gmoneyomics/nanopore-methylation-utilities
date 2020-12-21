@@ -1,9 +1,41 @@
-# nanopore-methylation-utilities
-Set of utilities for analyzing nanopore methylation data
+# Snakemake pipeline for calling methylation on nanopore sequence data 
 
+# Dependencies
+Install Minimap2 https://github.com/lh3/minimap2
+
+Install Nanopolish https://github.com/jts/nanopolish
+
+Install bcftools, samtools, htslib http://www.htslib.org/download/
+
+Install nanopore-methylation-utilites https://github.com/timplab/nanopore-methylation-utilities
+
+Install snakemake https://snakemake.readthedocs.io/en/stable/
+
+# Setting up pipeline
+All the workflows here expect all paths to softwares and data to exist in the config before they are included. 
+The config.yaml file can be edited directly with the paths to these installed software packages and the path to fast5, fastq, reference, out path and number of cores
+```
+nanopolish: /home/Software/nanopolish
+```
+
+# Run pipeline
+Once config file is updated for local path run the pipeline:
+
+```
+snakemake --snakefile call_meth_pipeline_config
+```
+# test
+To test the pipeline:
+Download test data and input paths into config
+```
+./test/get_test_dat.sh
+snakemake --snakefile call_meth_pipeline_config
+```
+
+# Outputs
 bed-style format methylation file
 ------
-I convert the nanopolish methylation calling output into bed-style format, such that each line is
+nanopore-methylation-utilites will convert nanopolish methylation calling output into bed-style format, such that each line is
 
 |Contig |Start  |End  |Read name  |Methylation call string  |Log-likelihood ratios  |Motif context  |
 |-------|-------|-----|-----------|-------------------------|-----------------------|---------------|
@@ -15,28 +47,10 @@ where Methylation call string is arranged such that
 - "m" means methylated, "u" means unmethylated, and "x" means uncalled (not confident)
 
 The resulting bed-style file is sorted, [bgzipped](http://www.htslib.org/doc/bgzip.html), and [tabix](http://www.htslib.org/doc/tabix.html) indexed for easy manipulation.  
-```
-./mtsv2bedGraph.py -i [path/to/nanopolish/methylation.tsv] |\
-  sort -k1,1 -k2,2n | bgzip > [methylation.bed.gz]
-tabix -p bed [methylation.bed.gz]
-```
 
-converting bam for igv
+
+The bam file will be converted for IGV
 ------
 Using the converted bed-style methylation file, the original bam file can be "bisulfite converted _in silico_" for easy visualization on IGV via their bisulfite mode.
-There are three options for specifying the region to convert:
-- `-r,--regions` : for multiple regions, supply the bed file
-- `-w,--window` : for one region, supply the coordinate (chr:start-end)
-- without either of the above options, all reads will be converted
 
-```
-./convert_bam_for_methylation.py -b [path/to/sorted.bam] \
-  -c [path/to/cpg.methylation.bed.gz] -f [path/to/reference.fasta ] |\
-  samtools sort -o [path/to/converted.bam]
-samtools index [path/to/cnverted.bam]
-```
-#### For minimap2 alignments 
-
-Using `--MD` option during alignment is recommended.
-
-The default output does not have MD tags, and MD tags are necessary for using pysam to get the reference sequence. To get around this, the fasta of reference genome must be supplied via `-f,--fasta`.
+For more information about nanopolish, minimap, or nanopore-methylation-utilies outputs visit their respective git repositories
